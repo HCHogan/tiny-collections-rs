@@ -57,6 +57,10 @@ impl<K: Ord, V> Node<K, V> {
         self.keys.len()
     }
 
+    pub fn capacity(&self) -> usize {
+        self.keys.capacity()
+    }
+
     pub fn is_full(&self) -> bool {
         self.len() == self.capacity()
     }
@@ -68,10 +72,6 @@ impl<K: Ord, V> Node<K, V> {
     pub unsafe fn unsafe_swap(&mut self, index: usize, key: &mut K, val: &mut V) {
         mem::swap(self.keys.get_unchecked_mut(index), key);
         mem::swap(self.vals.get_unchecked_mut(index), val);
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.keys.capacity()
     }
 
     pub fn key(&self, idx: usize) -> Option<&K> {
@@ -139,7 +139,7 @@ impl<K: Ord, V> Node<K, V> {
                 unsafe { self.unsafe_val_mut(index) as *mut _ }
             } else {
                 new_right.insert_fit_as_leaf(index - left_len - 1, key, value);
-                unsafe { self.unsafe_val_mut(index) as *mut _ }
+                unsafe { new_right.unsafe_val_mut(index - left_len - 1) as *mut _ }
             };
             (Split(new_key, new_val, new_right), ptr)
         }
@@ -191,8 +191,8 @@ where
         for (i, k) in self.keys.iter().enumerate() {
             match k.cmp(key) {
                 Less => continue,
-                Equal => Found(i),
-                Greater => GoDown(i),
+                Equal => return Found(i),
+                Greater => return GoDown(i),
             };
         }
         GoDown(self.len())
@@ -214,7 +214,7 @@ where
     fn insert_fit_as_internal(&mut self, index: usize, key: K, val: V, right: Node<K, V>) {
         self.keys.insert(index, key);
         self.vals.insert(index, val);
-        self.edges.insert(index, right);
+        self.edges.insert(index + 1, right);
     }
 
     // Node is full, so split it into two nodes, and yield the middle-most key-vale par
@@ -267,7 +267,7 @@ where
         };
 
         // swap the parent's seperating kv pair node with left
-        self.unsafe_swap(underflowed_child_index, &mut key, &mut val);
+        self.unsafe_swap(underflowed_child_index - 1, &mut key, &mut val);
 
         // put it to the begin of right node
         let right = self.unsafe_edge_mut(underflowed_child_index);
@@ -316,6 +316,8 @@ where
     }
 
     fn absorb(&mut self, key: K, val: V, right: Node<K, V>) {
+        debug_assert!(self.len() + right.len() <= self.capacity());
+
         self.keys.push(key);
         self.vals.push(val);
         self.keys.extend(right.keys);
@@ -333,9 +335,9 @@ fn split<T>(left: &mut Vec<T>) -> Vec<T> {
     unsafe {
         let left_ptr = left.get_unchecked_mut(left_len) as *mut _;
         let right_ptr = right.as_mut_ptr();
-        ptr::copy_nonoverlapping(right_ptr, left_ptr, right_len);
+        ptr::copy_nonoverlapping(left_ptr, right_ptr, right_len);
         left.set_len(left_len);
-        right.set_len(left_len);
+        right.set_len(right_len);
     }
     right
 }

@@ -24,6 +24,14 @@ impl<K: Ord, V> BTreeMap<K, V> {
         BTreeMap::with_b(6)
     }
 
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
     /// Makes a new empty BTreeMap with the given B.
     pub fn with_b(b: usize) -> BTreeMap<K, V> {
         assert!(b > 1, "B must be greater than 1");
@@ -50,7 +58,7 @@ impl<K: Ord, V> BTreeMap<K, V> {
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: K, mut value: V) -> Option<V> {
         // Insertion in a B-Tree is a bit complicated.
         //
         // First we do the same kind of search described in `find`. But we need to maintain a stack of
@@ -82,7 +90,9 @@ impl<K: Ord, V> BTreeMap<K, V> {
             match stack.next().search(&key) {
                 Found(i) => unsafe {
                     let next = stack.into_next();
-                    return Some(mem::replace(next.unsafe_val_mut(i), value));
+                    mem::swap(next.unsafe_val_mut(i), &mut value);
+                    return Some(value);
+                    // return Some(mem::replace(next.unsafe_val_mut(i), value));
                 },
                 GoDown(i) => {
                     stack = match stack.push(i) {
@@ -138,12 +148,10 @@ impl<K: Ord, V> BTreeMap<K, V> {
                 Found(i) => {
                     // exact match
                     return Some(stack.seal(i).remove());
-                },
+                }
                 GoDown(i) => {
                     stack = match stack.push(i) {
-                        Grew(new_stack) => {
-                            new_stack
-                        },
+                        Grew(new_stack) => new_stack,
                         Done(_) => return None,
                     }
                 }
@@ -164,8 +172,68 @@ mod test {
         });
 
         (0..100).for_each(|i| {
-            assert_eq!(Some(&i), bt.find(&i));
+            assert_eq!(bt.find(&i), Some(&i));
         });
     }
-}
 
+    #[test]
+    fn test_basic_large() {
+        let mut map = BTreeMap::new();
+        let size = 10000;
+        assert_eq!(map.len(), 0);
+
+        for i in 0..size {
+            assert_eq!(map.insert(i, 10 * i), None);
+            assert_eq!(map.len(), i + 1);
+        }
+
+        for i in 0..size {
+            assert_eq!(map.find(&i).unwrap(), &(i * 10));
+        }
+
+        for i in size..size * 2 {
+            assert_eq!(map.find(&i), None);
+        }
+
+        for i in 0..size {
+            assert_eq!(map.insert(i, 100 * i), Some(10 * i));
+            assert_eq!(map.len(), size);
+        }
+
+        for i in 0..size {
+            assert_eq!(map.find(&i).unwrap(), &(i * 100));
+        }
+
+        for i in 0..size / 2 {
+            assert_eq!(map.remove(&(i * 2)), Some(i * 200));
+            assert_eq!(map.len(), size - i - 1);
+        }
+
+        for i in 0..size / 2 {
+            assert_eq!(map.find(&(2 * i)), None);
+            assert_eq!(map.find(&(2 * i + 1)).unwrap(), &(i * 200 + 100));
+        }
+
+        for i in 0..size / 2 {
+            assert_eq!(map.remove(&(2 * i)), None);
+            assert_eq!(map.remove(&(2 * i + 1)), Some(i * 200 + 100));
+            assert_eq!(map.len(), size / 2 - i - 1);
+        }
+    }
+
+    #[test]
+    fn test_basic_small() {
+        let mut map = BTreeMap::new();
+        assert_eq!(map.remove(&1), None);
+        assert_eq!(map.find(&1), None);
+        assert_eq!(map.insert(1, 1), None);
+        assert_eq!(map.find(&1), Some(&1));
+        assert_eq!(map.insert(1, 2), Some(1));
+        assert_eq!(map.find(&1), Some(&2));
+        assert_eq!(map.insert(2, 4), None);
+        assert_eq!(map.find(&2), Some(&4));
+        assert_eq!(map.remove(&1), Some(2));
+        assert_eq!(map.remove(&2), Some(4));
+        assert_eq!(map.remove(&1), None);
+    }
+}

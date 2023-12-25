@@ -38,7 +38,7 @@ where
         unsafe { &*self.next }
     }
 
-    pub fn into_next(self) -> &'a mut Node<K, V> {
+    pub fn into_next(mut self) -> &'a mut Node<K, V> {
         unsafe { &mut *self.next }
     }
 
@@ -47,7 +47,7 @@ where
         SearchStack {
             map: self.map,
             stack: self.stack,
-            top: (unsafe { &mut *self.next }, index),
+            top: (self.next as *mut _, index),
         }
     }
 
@@ -56,9 +56,11 @@ where
         let map = self.map;
         let mut stack = self.stack;
         let next_ptr = self.next;
-        let next_node = self.next;
+        let next_node = unsafe {
+            &mut *next_ptr
+        };
         let to_insert = (next_ptr, edge);
-        match unsafe { (*next_node).edge_mut(edge) } {
+        match next_node.edge_mut(edge)  {
             None => Done(SearchStack {
                 map,
                 stack,
@@ -149,8 +151,10 @@ where
                 None => {
                     // Now we reached the root.
                     if map.root.len() == 0 && !map.root.is_leaf() {
-                        //
+                        map.depth -= 1;
+                        map.root = map.root.pop_edge().unwrap();
                     }
+                    return value;
                 }
                 Some((parent_ptr, index)) => {
                     if underflow {

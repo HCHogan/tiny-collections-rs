@@ -1,4 +1,3 @@
-#![allow(unused)]
 use tiny_collections_rs::btreemap::map::BTreeMap;
 
 fn main() {
@@ -8,7 +7,7 @@ fn main() {
         });
 
         (0..100).for_each(|i| {
-            assert_eq!(Some(&i), bt.find(&i));
+            println!("{:?} ", bt.remove(&i));
         });
 }
 
